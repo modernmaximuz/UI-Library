@@ -10,6 +10,33 @@ local TweenService    = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players         = game:GetService("Players")
 local LocalPlayer     = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local SaveFolder = "HadesSaves"
+
+local Saves = {}
+local currentSave = "default"
+local autoLoad = false
+
+function HadesLib:SetSaveName(name)
+    currentSave = name
+end
+
+function HadesLib:SaveConfig(data)
+    if writefile then
+        writefile(SaveFolder .. "_" .. currentSave .. ".json", HttpService:JSONEncode(data))
+    end
+end
+
+function HadesLib:LoadConfig()
+    if readfile and isfile(SaveFolder .. "_" .. currentSave .. ".json") then
+        local raw = readfile(SaveFolder .. "_" .. currentSave .. ".json")
+        return HttpService:JSONDecode(raw)
+    end
+end
+
+function HadesLib:SetAutoLoad(bool)
+    autoLoad = bool
+end
 
 -- ── Helpers ──────────────────────────────
 
@@ -29,6 +56,7 @@ local function newInst(class, props)
     return obj
 end
 
+
 -- ── Palette ──────────────────────────────
 
 local C = {
@@ -46,6 +74,59 @@ local C = {
 
 local TI_FAST  = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local TI_MED   = TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+-- Floating Toggle Button (Mobile Support)
+
+local ToggleBtn = Instance.new("ImageButton")
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleBtn.Position = UDim2.new(0, 20, 0, 200)
+ToggleBtn.BackgroundColor3 = C.panel
+ToggleBtn.Image = "rbxassetid://" .. logoId
+ToggleBtn.ZIndex = 999
+
+corner(ToggleBtn, 12)
+
+-- Dragging button (mobile + pc)
+local btnDragging, btnDragStart, btnStartPos
+
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        btnDragging = true
+        btnDragStart = input.Position
+        btnStartPos = ToggleBtn.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                btnDragging = false
+            end
+        end)
+    end
+end)
+
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if btnDragging and input.UserInputType == Enum.UserInputType.Touch then
+        local delta = input.Position - btnDragStart
+        ToggleBtn.Position = UDim2.new(
+            btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X,
+            btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Toggle GUI
+ToggleBtn.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
 
 -- ── CreateWindow ─────────────────────────
 
@@ -83,6 +164,14 @@ function HadesLib.CreateWindow(title, logoId)
     })
     corner(Main, 10)
 
+task.spawn(function()
+    if autoLoad then
+        local data = HadesLib:LoadConfig()
+        if data then
+            print("Loaded config:", currentSave)
+        end
+    end
+end)
     -- ── Sidebar ──────────────────────────
 
     local Sidebar = newInst("Frame", {
@@ -306,56 +395,43 @@ function HadesLib.CreateWindow(title, logoId)
 
     -- ── Dragging ─────────────────────────
 
-    local dragging, dragStart, startPos = false, nil, nil
+   local dragging, dragStart, startPos
 
-    TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging  = true
-            dragStart = input.Position
-            startPos  = Shadow.Position
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            Shadow.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
+local function update(input)
+    local delta = input.Position - dragStart
+    Shadow.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
 
-    -- ── Hide keybind ─────────────────────
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Shadow.Position
 
-    local currentKey = Enum.KeyCode.LeftAlt
-    local binding    = false
-
-    HideKey.MouseButton1Click:Connect(function()
-        if binding then return end
-        binding = true
-        HideKey.Text = ". . ."
-        local conn
-        conn = UserInputService.InputBegan:Connect(function(input, gpe)
-            if gpe then return end
-            if input.KeyCode ~= Enum.KeyCode.Unknown then
-                currentKey  = input.KeyCode
-                HideKey.Text = input.KeyCode.Name
-                binding = false
-                conn:Disconnect()
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
             end
         end)
-    end)
+    end
+end)
 
-    UserInputService.InputBegan:Connect(function(input, gpe)
-        if not gpe and input.KeyCode == currentKey then
-            ScreenGui.Enabled = not ScreenGui.Enabled
-        end
-    end)
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
 
     -- ── Tab system internals ──────────────
 
@@ -847,7 +923,7 @@ function HadesLib.CreateWindow(title, logoId)
                     end
                 end)
                 UserInputService.InputChanged:Connect(function(input)
-                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    if dragging and  then
                         updateSlider(input.Position.X)
                     end
                 end)
