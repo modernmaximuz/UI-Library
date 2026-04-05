@@ -5,7 +5,7 @@
 -- ══════════════════════════════════════════
 
 local HadesLib = loadstring(game:HttpGet(
-    "https://raw.githubusercontent.com/YOUR_REPO/HadesLib.lua"
+    "https://raw.githubusercontent.com/modernmaximuz/UI-Library/refs/heads/main/Hades/Main"
 ))()
 
 local Hades = HadesLib.CreateWindow("Hades", 6105620301)
